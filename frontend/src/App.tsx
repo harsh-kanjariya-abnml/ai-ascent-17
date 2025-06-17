@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { 
   Container, 
   Box, 
@@ -35,6 +35,7 @@ function App() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [isUploading, setIsUploading] = useState(false)
+  const resumeListRef = useRef<{ fetchCandidates: () => void }>(null)
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -51,13 +52,13 @@ function App() {
 
   const handleUpload = async (file: File) => {
     const formData = new FormData()
-    formData.append('file', file)
+    formData.append('resume', file)
 
     setIsUploading(true)
     setUploadProgress(0)
 
     try {
-      await axios.post('/process', formData, {
+      await axios.post('http://localhost:8000/api/process/', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -69,6 +70,8 @@ function App() {
         },
       })
       alert('Resume uploaded successfully!')
+      // Refresh the candidate list after successful upload
+      resumeListRef.current?.fetchCandidates()
     } catch (error) {
       console.error('Error uploading file:', error)
       alert('Error uploading file. Please try again.')
@@ -80,7 +83,7 @@ function App() {
 
   return (
     <ThemeProvider theme={theme}>
-      <Container maxWidth="md">
+      <Container maxWidth="xl">
         <Box sx={{ my: 4, textAlign: 'center' }}>
           <Typography variant="h3" component="h1" gutterBottom>
             Resume Classification
@@ -131,7 +134,7 @@ function App() {
             )}
           </Paper>
 
-          <ResumeList />
+          <ResumeList ref={resumeListRef} />
         </Box>
       </Container>
     </ThemeProvider>
