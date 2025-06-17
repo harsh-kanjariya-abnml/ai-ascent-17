@@ -1,14 +1,22 @@
 """
 Resume parser service module.
-This module provides functionality to parse PDF resumes and extract structured data.
+This module provides functionality to parse PDF resumes and extract structured data using LLM.
 """
 
 import re
+import json
+import os
 from typing import Dict, Any, List
+import PyPDF2
+import openai
+from django.conf import settings
+
+# Configure OpenAI (you can also use other LLM providers)
+openai.api_key = getattr(settings, 'OPENAI_API_KEY', os.environ.get('OPENAI_API_KEY'))
 
 def process_resume(pdf_file) -> Dict[str, Any]:
     """
-    Process a PDF resume file and extract structured data.
+    Process a PDF resume file and extract structured data using LLM.
     
     Args:
         pdf_file: The uploaded PDF file
@@ -16,35 +24,15 @@ def process_resume(pdf_file) -> Dict[str, Any]:
     Returns:
         Dict containing extracted resume data
     """
-    # This is a mock implementation. In a real scenario, you would use
-    # libraries like PyPDF2, pdfplumber, or AI services to extract text
-    # and then parse it to extract structured information.
-    
     try:
-        # Mock extracted text (in real implementation, extract from PDF)
-        mock_text = """
-        John Doe
+        # Step 1: Convert PDF to text
+        text_content = extract_text_from_pdf(pdf_file)
         
-        Senior Software Engineer with 8 years of experience in Python, Django, React, JavaScript.
-        Experience in cloud technologies and machine learning.
-        Strong in both frontend and backend development.
+        if not text_content.strip():
+            raise Exception("Could not extract text from PDF file")
         
-        Education:
-        Bachelor's Degree in Computer Science
-        
-        Skills:
-        Python, Django, React, JavaScript, AWS, Docker, Machine Learning
-        """
-        
-        # Extract structured data (this would be more sophisticated in real implementation)
-        extracted_data = {
-            'name': _extract_name(mock_text),
-            'skills': _extract_skills(mock_text),
-            'fe_score': _calculate_fe_score(mock_text),
-            'be_score': _calculate_be_score(mock_text),
-            'seniority': _extract_seniority(mock_text),
-            'qualifications': _extract_qualifications(mock_text)
-        }
+        # Step 2: Use LLM to extract structured data
+        extracted_data = extract_data_with_llm(text_content)
         
         return extracted_data
         
@@ -52,20 +40,280 @@ def process_resume(pdf_file) -> Dict[str, Any]:
         raise Exception(f"Error processing resume: {str(e)}")
 
 
-def _extract_name(text: str) -> str:
-    """Extract name from resume text."""
+def extract_text_from_pdf(pdf_file) -> str:
+    """
+    Extract text content from PDF file.
+    
+    Args:
+        pdf_file: The uploaded PDF file
+        
+    Returns:
+        str: Extracted text content
+    """
+    try:
+        # Reset file pointer to beginning
+        pdf_file.seek(0)
+        
+        # Create PDF reader object
+        pdf_reader = PyPDF2.PdfReader(pdf_file)
+        
+        # Extract text from all pages
+        text_content = ""
+        for page_num in range(len(pdf_reader.pages)):
+            page = pdf_reader.pages[page_num]
+            text_content += page.extract_text() + "\n"
+        
+        return text_content.strip()
+        
+    except Exception as e:
+        raise Exception(f"Failed to extract text from PDF: {str(e)}")
+
+
+def extract_data_with_llm(text_content: str) -> Dict[str, Any]:
+    """
+    Use LLM to extract structured data from resume text.
+    
+    Args:
+        text_content: The extracted text from PDF
+        
+    Returns:
+        Dict containing structured candidate data
+    """
+    try:
+        # Create prompt for LLM
+        prompt = create_extraction_prompt(text_content)
+        
+        # Call OpenAI API (you can replace this with other LLM providers)
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a resume parsing assistant. Extract candidate information and return it as valid JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1,
+            max_tokens=1000
+        )
+        
+        # Parse LLM response
+        llm_response = response.choices[0].message.content.strip()
+        
+        # Extract JSON from response
+        extracted_data = parse_llm_response(llm_response)
+        
+        # Validate and normalize the data
+        normalized_data = normalize_extracted_data(extracted_data)
+        
+        return normalized_data
+        
+    except Exception as e:
+        # Fallback to rule-based extraction if LLM fails
+        print(f"LLM extraction failed: {str(e)}, falling back to rule-based extraction")
+        return fallback_extraction(text_content)
+
+
+def create_extraction_prompt(text_content: str) -> str:
+    """
+    Create a prompt for LLM to extract candidate information.
+    
+    Args:
+        text_content: The resume text content
+        
+    Returns:
+        str: Formatted prompt for LLM
+    """
+    prompt = f"""
+    Please analyze the following resume text and extract candidate information. Return the data as valid JSON with the following structure:
+
+    {{
+        "name": "candidate's full name",
+        "skills": ["list", "of", "technical", "skills"],
+        "seniority": "junior|mid|senior|lead|principal",
+        "qualifications": "high_school|bachelors|masters|phd|diploma|certification"
+    }}
+
+    Guidelines:
+    1. For seniority: Determine based on job titles, years of experience, and responsibilities
+    2. For qualifications: Extract the highest educational qualification
+    3. For skills: Focus on technical skills, programming languages, frameworks, tools
+    4. Return ONLY the JSON object, no additional text
+
+    Resume text:
+    {text_content}
+    """
+    return prompt
+
+
+def parse_llm_response(llm_response: str) -> Dict[str, Any]:
+    """
+    Parse the LLM response and extract JSON data.
+    
+    Args:
+        llm_response: Raw response from LLM
+        
+    Returns:
+        Dict containing parsed data
+    """
+    try:
+        # Try to find JSON in the response
+        json_start = llm_response.find('{')
+        json_end = llm_response.rfind('}') + 1
+        
+        if json_start != -1 and json_end > json_start:
+            json_str = llm_response[json_start:json_end]
+            return json.loads(json_str)
+        else:
+            raise Exception("No valid JSON found in LLM response")
+            
+    except json.JSONDecodeError as e:
+        raise Exception(f"Failed to parse JSON from LLM response: {str(e)}")
+
+
+def normalize_extracted_data(extracted_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Normalize and validate the extracted data.
+    
+    Args:
+        extracted_data: Raw extracted data from LLM
+        
+    Returns:
+        Dict containing normalized data
+    """
+    # Valid choices
+    valid_seniorities = ['junior', 'mid', 'senior', 'lead', 'principal']
+    valid_qualifications = ['high_school', 'bachelors', 'masters', 'phd', 'diploma', 'certification']
+    
+    # Normalize name
+    name = extracted_data.get('name', 'Unknown').strip()
+    if not name or name.lower() == 'unknown':
+        name = 'Unknown'
+    
+    # Normalize skills
+    skills = extracted_data.get('skills', [])
+    if not isinstance(skills, list):
+        skills = []
+    skills = [skill.strip() for skill in skills if skill.strip()]
+    
+    # Normalize seniority
+    seniority = extracted_data.get('seniority', 'mid').lower().strip()
+    if seniority not in valid_seniorities:
+        seniority = 'mid'  # Default fallback
+    
+    # Normalize qualifications
+    qualifications = extracted_data.get('qualifications', 'bachelors').lower().strip()
+    if qualifications not in valid_qualifications:
+        qualifications = 'bachelors'  # Default fallback
+    
+    # Calculate scores based on skills and seniority
+    fe_score = calculate_fe_score_from_data(skills, seniority)
+    be_score = calculate_be_score_from_data(skills, seniority)
+    
+    return {
+        'name': name,
+        'skills': skills,
+        'fe_score': fe_score,
+        'be_score': be_score,
+        'seniority': seniority,
+        'qualifications': qualifications
+    }
+
+
+def calculate_fe_score_from_data(skills: List[str], seniority: str) -> int:
+    """Calculate frontend score based on skills and seniority."""
+    fe_skills = [
+        'react', 'angular', 'vue', 'javascript', 'typescript', 'html', 'css',
+        'frontend', 'front-end', 'ui', 'ux', 'responsive', 'bootstrap', 'sass',
+        'webpack', 'babel', 'npm', 'yarn', 'redux', 'mobx', 'jquery', 'next.js',
+        'nuxt.js', 'svelte', 'ember', 'backbone', 'material-ui', 'tailwind'
+    ]
+    
+    score = 0
+    skills_lower = [skill.lower() for skill in skills]
+    
+    # Score based on skills
+    for skill in fe_skills:
+        if any(skill in s for s in skills_lower):
+            score += 10
+    
+    # Bonus for seniority
+    seniority_bonus = {
+        'junior': 5,
+        'mid': 10,
+        'senior': 20,
+        'lead': 30,
+        'principal': 30
+    }
+    score += seniority_bonus.get(seniority, 10)
+    
+    return min(score, 100)
+
+
+def calculate_be_score_from_data(skills: List[str], seniority: str) -> int:
+    """Calculate backend score based on skills and seniority."""
+    be_skills = [
+        'python', 'django', 'flask', 'fastapi', 'node.js', 'express', 'java',
+        'spring', 'c#', '.net', 'ruby', 'rails', 'php', 'laravel', 'go',
+        'rust', 'backend', 'back-end', 'api', 'database', 'sql', 'mongodb',
+        'postgresql', 'mysql', 'redis', 'elasticsearch', 'microservices',
+        'docker', 'kubernetes', 'aws', 'azure', 'gcp', 'serverless', 'graphql',
+        'rest', 'grpc', 'kafka', 'rabbitmq', 'nginx', 'apache'
+    ]
+    
+    score = 0
+    skills_lower = [skill.lower() for skill in skills]
+    
+    # Score based on skills
+    for skill in be_skills:
+        if any(skill in s for s in skills_lower):
+            score += 10
+    
+    # Bonus for seniority
+    seniority_bonus = {
+        'junior': 5,
+        'mid': 10,
+        'senior': 20,
+        'lead': 30,
+        'principal': 30
+    }
+    score += seniority_bonus.get(seniority, 10)
+    
+    return min(score, 100)
+
+
+def fallback_extraction(text_content: str) -> Dict[str, Any]:
+    """
+    Fallback rule-based extraction if LLM fails.
+    
+    Args:
+        text_content: The resume text content
+        
+    Returns:
+        Dict containing extracted data using rule-based approach
+    """
+    return {
+        'name': _extract_name_fallback(text_content),
+        'skills': _extract_skills_fallback(text_content),
+        'fe_score': _calculate_fe_score_fallback(text_content),
+        'be_score': _calculate_be_score_fallback(text_content),
+        'seniority': _extract_seniority_fallback(text_content),
+        'qualifications': _extract_qualifications_fallback(text_content)
+    }
+
+
+def _extract_name_fallback(text: str) -> str:
+    """Extract name using rule-based approach."""
     lines = text.strip().split('\n')
-    # Assume first non-empty line is the name
-    for line in lines:
+    for line in lines[:5]:  # Check first 5 lines
         line = line.strip()
         if line and not '@' in line and not '+' in line and len(line) < 50:
-            return line
+            # Simple name validation
+            words = line.split()
+            if 2 <= len(words) <= 4 and all(word.isalpha() or word.replace('.', '').isalpha() for word in words):
+                return line
     return "Unknown"
 
 
-def _extract_skills(text: str) -> List[str]:
-    """Extract skills from resume text."""
-    # Common tech skills - in real implementation, use NLP or predefined skill sets
+def _extract_skills_fallback(text: str) -> List[str]:
+    """Extract skills using rule-based approach."""
     common_skills = [
         'Python', 'JavaScript', 'React', 'Django', 'Node.js', 'Java', 'C++', 'C#',
         'AWS', 'Docker', 'Kubernetes', 'Machine Learning', 'SQL', 'MongoDB',
@@ -83,66 +331,18 @@ def _extract_skills(text: str) -> List[str]:
     return found_skills
 
 
-def _calculate_fe_score(text: str) -> int:
-    """Calculate frontend score based on skills and experience."""
-    text_lower = text.lower()
-    fe_skills = [
-        'react', 'angular', 'vue', 'javascript', 'typescript', 'html', 'css',
-        'frontend', 'front-end', 'ui', 'ux', 'responsive', 'bootstrap', 'sass',
-        'webpack', 'babel', 'npm', 'yarn', 'redux', 'mobx', 'jquery'
-    ]
-    
-    score = 0
-    for skill in fe_skills:
-        if skill in text_lower:
-            score += 10
-    
-    # Bonus for experience level
-    if 'senior' in text_lower:
-        score += 20
-    elif 'lead' in text_lower or 'principal' in text_lower:
-        score += 30
-    elif 'junior' in text_lower:
-        score += 5
-    else:
-        score += 10
-    
-    # Cap at 100
-    return min(score, 100)
+def _calculate_fe_score_fallback(text: str) -> int:
+    """Calculate frontend score using rule-based approach."""
+    return calculate_fe_score_from_data(_extract_skills_fallback(text), _extract_seniority_fallback(text))
 
 
-def _calculate_be_score(text: str) -> int:
-    """Calculate backend score based on skills and experience."""
-    text_lower = text.lower()
-    be_skills = [
-        'python', 'django', 'flask', 'fastapi', 'node.js', 'express', 'java',
-        'spring', 'c#', '.net', 'ruby', 'rails', 'php', 'laravel', 'go',
-        'rust', 'backend', 'back-end', 'api', 'database', 'sql', 'mongodb',
-        'postgresql', 'mysql', 'redis', 'elasticsearch', 'microservices',
-        'docker', 'kubernetes', 'aws', 'azure', 'gcp', 'serverless'
-    ]
-    
-    score = 0
-    for skill in be_skills:
-        if skill in text_lower:
-            score += 10
-    
-    # Bonus for experience level
-    if 'senior' in text_lower:
-        score += 20
-    elif 'lead' in text_lower or 'principal' in text_lower:
-        score += 30
-    elif 'junior' in text_lower:
-        score += 5
-    else:
-        score += 10
-    
-    # Cap at 100
-    return min(score, 100)
+def _calculate_be_score_fallback(text: str) -> int:
+    """Calculate backend score using rule-based approach."""
+    return calculate_be_score_from_data(_extract_skills_fallback(text), _extract_seniority_fallback(text))
 
 
-def _extract_seniority(text: str) -> str:
-    """Extract seniority level from resume text."""
+def _extract_seniority_fallback(text: str) -> str:
+    """Extract seniority using rule-based approach."""
     text_lower = text.lower()
     
     if 'senior' in text_lower or 'sr.' in text_lower:
@@ -157,8 +357,8 @@ def _extract_seniority(text: str) -> str:
         return 'mid'
 
 
-def _extract_qualifications(text: str) -> str:
-    """Extract highest qualification from resume text."""
+def _extract_qualifications_fallback(text: str) -> str:
+    """Extract qualifications using rule-based approach."""
     text_lower = text.lower()
     
     if 'phd' in text_lower or 'doctorate' in text_lower or 'ph.d' in text_lower:
