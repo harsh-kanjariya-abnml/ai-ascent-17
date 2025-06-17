@@ -4,12 +4,18 @@
 
 ### 1. Process Resume - POST /api/process/
 
-Processes a PDF resume file and extracts candidate information.
+Processes a PDF resume file using AI-powered extraction and calculates frontend/backend scores.
 
 **Request:**
 - Method: POST
 - Content-Type: multipart/form-data
 - Body: PDF file with key 'resume'
+
+**Processing Steps:**
+1. **PDF Text Extraction**: Converts PDF to plain text using PyPDF2
+2. **LLM Analysis**: Uses OpenAI GPT-3.5-turbo to extract structured data
+3. **Score Calculation**: Automatically calculates FE/BE scores based on skills and seniority
+4. **Data Validation**: Normalizes and validates extracted information
 
 **Response:**
 - 201 Created: Resume processed successfully
@@ -30,7 +36,7 @@ curl -X POST \
   "candidate_id": "123e4567-e89b-12d3-a456-426614174000",
   "candidate_data": {
     "name": "John Doe",
-    "skills": ["Python", "Django", "React", "JavaScript"],
+    "skills": ["Python", "Django", "React", "JavaScript", "AWS", "Docker"],
     "fe_score": 75,
     "be_score": 85,
     "seniority": "senior",
@@ -103,28 +109,41 @@ curl -X POST \
 }
 ```
 
+## AI-Powered Processing
+
+### LLM Integration
+The system uses **OpenAI GPT-3.5-turbo** to intelligently extract candidate information from resume text with:
+- **Structured Prompting**: Guides the AI to extract specific fields
+- **JSON Response Parsing**: Ensures consistent data format
+- **Fallback Processing**: Uses rule-based extraction if AI fails
+- **Data Validation**: Normalizes and validates all extracted information
+
+### PDF Processing
+- **Text Extraction**: Uses PyPDF2 to convert PDF content to plain text
+- **Multi-page Support**: Processes all pages in the PDF document
+- **Error Handling**: Graceful fallback for corrupted or unreadable PDFs
+
 ## Models
 
 ### CandidateProfile
 
 Fields:
 - `id` (UUID): Primary key
-- `name` (string): Candidate name
-- `skills` (JSON array): List of skills
-- `fe_score` (integer): Frontend score (0-100)
-- `be_score` (integer): Backend score (0-100)
-- `seniority` (string): Seniority level
-- `qualifications` (string): Highest qualification
+- `name` (string): Candidate name (extracted by LLM)
+- `skills` (JSON array): List of technical skills (extracted by LLM)
+- `fe_score` (integer): Frontend score (0-100) - calculated automatically
+- `be_score` (integer): Backend score (0-100) - calculated automatically
+- `seniority` (string): Seniority level (extracted by LLM)
+- `qualifications` (string): Highest qualification (extracted by LLM)
 - `created_at` (datetime): Creation timestamp
 - `updated_at` (datetime): Last update timestamp
 
-## Scoring System
-
-The system automatically calculates frontend and backend scores based on:
+## Intelligent Scoring System
 
 ### Frontend Score (fe_score)
-- **Skills Detected**: React, Angular, Vue, JavaScript, TypeScript, HTML, CSS, UI/UX tools (+10 each)
-- **Experience Level**: 
+Automatically calculated based on:
+- **Frontend Skills**: React (+10), Angular (+10), Vue (+10), JavaScript (+10), TypeScript (+10), HTML (+10), CSS (+10), UI/UX tools (+10 each)
+- **Seniority Bonus**: 
   - Junior: +5
   - Mid: +10
   - Senior: +20
@@ -132,13 +151,29 @@ The system automatically calculates frontend and backend scores based on:
 - **Maximum Score**: 100
 
 ### Backend Score (be_score)
-- **Skills Detected**: Python, Django, Node.js, Java, databases, cloud services, APIs (+10 each)
-- **Experience Level**: 
+Automatically calculated based on:
+- **Backend Skills**: Python (+10), Django (+10), Node.js (+10), Java (+10), databases (+10), cloud services (+10), APIs (+10 each)
+- **Seniority Bonus**:
   - Junior: +5
   - Mid: +10
   - Senior: +20
   - Lead/Principal: +30
 - **Maximum Score**: 100
+
+## Configuration
+
+### Environment Variables
+Set the following environment variable to enable LLM processing:
+```bash
+export OPENAI_API_KEY="your-openai-api-key-here"
+```
+
+### Fallback Behavior
+If the OpenAI API is unavailable or fails:
+1. The system automatically falls back to rule-based extraction
+2. Processing continues without interruption
+3. Scores are still calculated using available data
+4. Error is logged for debugging
 
 ## Error Handling
 
@@ -148,4 +183,11 @@ All endpoints return appropriate HTTP status codes:
 - 400: Bad Request
 - 500: Internal Server Error
 
-Error responses include an `error` field with a descriptive message. 
+Error responses include an `error` field with a descriptive message.
+
+## Performance Notes
+
+- **PDF Processing**: Optimized for documents up to 10MB
+- **LLM Processing**: Typical response time 2-5 seconds
+- **Caching**: Consider implementing caching for frequently processed resumes
+- **Rate Limiting**: OpenAI API has rate limits - consider implementing queuing for high volume 
