@@ -201,9 +201,12 @@ const ResumeList = forwardRef<ResumeListRef>((_, ref) => {
                 label="Qualifications"
               >
                 <MenuItem value="">All</MenuItem>
-                <MenuItem value="bachelors">Bachelor's</MenuItem>
-                <MenuItem value="masters">Master's</MenuItem>
-                <MenuItem value="phd">PhD</MenuItem>
+                <MenuItem value="Bachelors">Bachelor's</MenuItem>
+                <MenuItem value="Masters">Master's</MenuItem>
+                <MenuItem value="PhD">PhD</MenuItem>
+                <MenuItem value="Diploma">Diploma</MenuItem>
+                <MenuItem value="Certification">Certification</MenuItem>
+                <MenuItem value="High School">High School</MenuItem>
               </Select>
             </FormControl>
           </Grid>
