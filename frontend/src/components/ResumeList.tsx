@@ -89,13 +89,11 @@ const ResumeList = forwardRef<ResumeListRef>((_, ref) => {
     try {
       const response = await axios.post('http://localhost:8000/api/get-candidates/', {
         page,
-        filters: {
-          skills: filters.skills,
-          seniorityLevel: filters.seniorityLevel,
-          qualifications: filters.qualifications,
-          fe_score: filters.fe_score,
-          be_score: filters.be_score,
-        },
+        skills: filters.skills,
+        seniorityLevel: filters.seniorityLevel,
+        qualifications: filters.qualifications,
+        fe_score: filters.fe_score,
+        be_score: filters.be_score,
       });
       setCandidates(response.data.candidates);
       setTotalCount(response.data.total_count);
