@@ -12,6 +12,7 @@ import {
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import axios from 'axios'
 import type { AxiosProgressEvent } from 'axios'
+import ResumeList from './components/ResumeList'
 import './App.css'
 
 const theme = createTheme({
@@ -129,6 +130,8 @@ function App() {
               </Box>
             )}
           </Paper>
+
+          <ResumeList />
         </Box>
       </Container>
     </ThemeProvider>
