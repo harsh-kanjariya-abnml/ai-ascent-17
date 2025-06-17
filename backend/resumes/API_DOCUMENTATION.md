@@ -39,8 +39,8 @@ curl -X POST \
     "skills": ["Python", "Django", "React", "JavaScript", "AWS", "Docker"],
     "fe_score": 75,
     "be_score": 85,
-    "seniority": "senior",
-    "qualifications": "bachelors"
+    "seniority": "Senior",
+    "qualifications": "Bachelors"
   }
 }
 ```
@@ -55,13 +55,13 @@ Retrieves candidates based on filter criteria.
 - Body: JSON with filter parameters
 
 **Filter Parameters:**
-- `skills` (array of strings): Filter by skills
-- `seniority` (string): Filter by seniority level
-  - Valid values: "junior", "mid", "senior", "lead", "principal"
-- `qualifications` (string): Filter by qualifications
-  - Valid values: "high_school", "bachelors", "masters", "phd", "diploma", "certification"
-- `fe_score_min` (integer): Minimum frontend score (0-100)
-- `be_score_min` (integer): Minimum backend score (0-100)
+- `skills` (array of strings): Filter by technical skills
+- `seniorityLevel` (string): Filter by seniority level
+  - Valid values: "Junior", "Mid", "Senior", "Lead", "Principal"
+- `qualifications` (string): Filter by educational qualifications
+  - Valid values: "High School", "Bachelors", "Masters", "PhD", "Diploma", "Certification"
+- `fe_score` (integer): Minimum frontend score (0-100)
+- `be_score` (integer): Minimum backend score (0-100)
 
 **Response:**
 - 200 OK: Candidates retrieved successfully
@@ -75,10 +75,10 @@ curl -X POST \
   -H "Content-Type: application/json" \
   -d '{
     "skills": ["Python", "Django"],
-    "seniority": "senior",
-    "qualifications": "bachelors",
-    "fe_score_min": 70,
-    "be_score_min": 80
+    "seniorityLevel": "Senior",
+    "qualifications": "Bachelors",
+    "fe_score": 70,
+    "be_score": 80
   }'
 ```
 
@@ -92,8 +92,8 @@ curl -X POST \
       "skills": ["Python", "Django", "React", "JavaScript"],
       "fe_score": 75,
       "be_score": 85,
-      "seniority": "senior",
-      "qualifications": "bachelors",
+      "seniority": "Senior",
+      "qualifications": "Bachelors",
       "created_at": "2023-12-01T10:30:00Z",
       "updated_at": "2023-12-01T10:30:00Z"
     }
@@ -101,11 +101,45 @@ curl -X POST \
   "total_count": 1,
   "filters_applied": {
     "skills": ["Python", "Django"],
-    "seniority": "senior",
-    "qualifications": "bachelors",
-    "fe_score_min": 70,
-    "be_score_min": 80
+    "seniorityLevel": "Senior",
+    "qualifications": "Bachelors",
+    "fe_score": 70,
+    "be_score": 80
   }
+}
+```
+
+**Additional Filter Examples:**
+
+**Filter by Frontend Skills and Score:**
+```json
+{
+  "skills": ["React", "JavaScript", "TypeScript"],
+  "fe_score": 80
+}
+```
+
+**Filter by Backend Skills and Seniority:**
+```json
+{
+  "skills": ["Python", "Django", "AWS"],
+  "seniorityLevel": "Senior",
+  "be_score": 75
+}
+```
+
+**Filter by Qualifications Only:**
+```json
+{
+  "qualifications": "Masters"
+}
+```
+
+**Filter by Score Range:**
+```json
+{
+  "fe_score": 60,
+  "be_score": 70
 }
 ```
 
@@ -133,8 +167,8 @@ Fields:
 - `skills` (JSON array): List of technical skills (extracted by LLM)
 - `fe_score` (integer): Frontend score (0-100) - calculated automatically
 - `be_score` (integer): Backend score (0-100) - calculated automatically
-- `seniority` (string): Seniority level (extracted by LLM)
-- `qualifications` (string): Highest qualification (extracted by LLM)
+- `seniority` (string): Seniority level (extracted by LLM, displayed as "Junior", "Mid", "Senior", "Lead", "Principal")
+- `qualifications` (string): Highest qualification (extracted by LLM, displayed as "Bachelors", "Masters", etc.)
 - `created_at` (datetime): Creation timestamp
 - `updated_at` (datetime): Last update timestamp
 
@@ -159,6 +193,26 @@ Automatically calculated based on:
   - Senior: +20
   - Lead/Principal: +30
 - **Maximum Score**: 100
+
+## Filter Behavior
+
+### Skills Filtering
+- **Partial Match**: Uses case-insensitive partial matching
+- **Multiple Skills**: Filters candidates who have ALL specified skills
+- **Example**: `["Python", "React"]` finds candidates with both Python AND React skills
+
+### Score Filtering
+- **Minimum Threshold**: `fe_score` and `be_score` filter candidates with scores >= specified value
+- **Range Support**: Can combine both scores for candidates strong in both frontend and backend
+- **Example**: `{"fe_score": 70, "be_score": 80}` finds full-stack candidates
+
+### Seniority Filtering
+- **Exact Match**: Matches exact seniority level
+- **Case Sensitive**: Must use exact capitalization: "Junior", "Mid", "Senior", "Lead", "Principal"
+
+### Qualifications Filtering
+- **Exact Match**: Matches exact qualification level
+- **Case Sensitive**: Must use exact capitalization: "Bachelors", "Masters", "PhD", etc.
 
 ## Configuration
 

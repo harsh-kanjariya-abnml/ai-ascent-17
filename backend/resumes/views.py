@@ -109,12 +109,12 @@ def get_candidates(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Extract filter parameters
+        # Extract filter parameters with new naming
         skills_filter = data.get('skills', [])
-        seniority_filter = data.get('seniority', None)
+        seniority_level = data.get('seniorityLevel', None)
         qualifications_filter = data.get('qualifications', None)
-        fe_score_min = data.get('fe_score_min', None)
-        be_score_min = data.get('be_score_min', None)
+        fe_score = data.get('fe_score', None)
+        be_score = data.get('be_score', None)
         
         # Validate filter parameters
         if skills_filter and not isinstance(skills_filter, list):
@@ -123,29 +123,63 @@ def get_candidates(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        if seniority_filter and seniority_filter not in [choice.value for choice in SeniorityChoices]:
-            return JsonResponse(
-                {"error": f"Invalid seniority value. Must be one of: {[choice.value for choice in SeniorityChoices]}"}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        # Validate and normalize seniority level
+        if seniority_level:
+            seniority_mapping = {
+                'Junior': 'junior',
+                'Mid': 'mid', 
+                'Senior': 'senior',
+                'Lead': 'lead',
+                'Principal': 'principal'
+            }
+            
+            if seniority_level not in seniority_mapping:
+                return JsonResponse(
+                    {"error": f"Invalid seniorityLevel value. Must be one of: {list(seniority_mapping.keys())}"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Convert to lowercase for database query
+            seniority_filter = seniority_mapping[seniority_level]
+        else:
+            seniority_filter = None
         
-        if qualifications_filter and qualifications_filter not in [choice.value for choice in QualificationChoices]:
-            return JsonResponse(
-                {"error": f"Invalid qualifications value. Must be one of: {[choice.value for choice in QualificationChoices]}"}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        # Validate and normalize qualifications
+        if qualifications_filter:
+            qualifications_mapping = {
+                'Bachelors': 'bachelors',
+                'Masters': 'masters',
+                'PhD': 'phd',
+                'Diploma': 'diploma',
+                'Certification': 'certification',
+                'High School': 'high_school'
+            }
+            
+            if qualifications_filter not in qualifications_mapping:
+                return JsonResponse(
+                    {"error": f"Invalid qualifications value. Must be one of: {list(qualifications_mapping.keys())}"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Convert to lowercase for database query
+            qualifications_db_value = qualifications_mapping[qualifications_filter]
+        else:
+            qualifications_db_value = None
         
-        if fe_score_min is not None and (not isinstance(fe_score_min, int) or fe_score_min < 0 or fe_score_min > 100):
-            return JsonResponse(
-                {"error": "fe_score_min must be an integer between 0 and 100"}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        # Validate score filters
+        if fe_score is not None:
+            if not isinstance(fe_score, int) or fe_score < 0 or fe_score > 100:
+                return JsonResponse(
+                    {"error": "fe_score must be an integer between 0 and 100"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
         
-        if be_score_min is not None and (not isinstance(be_score_min, int) or be_score_min < 0 or be_score_min > 100):
-            return JsonResponse(
-                {"error": "be_score_min must be an integer between 0 and 100"}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        if be_score is not None:
+            if not isinstance(be_score, int) or be_score < 0 or be_score > 100:
+                return JsonResponse(
+                    {"error": "be_score must be an integer between 0 and 100"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
         
         # Start with all candidate profiles
         queryset = CandidateProfile.objects.all()
@@ -159,26 +193,30 @@ def get_candidates(request):
         if seniority_filter:
             queryset = queryset.filter(seniority=seniority_filter)
         
-        if qualifications_filter:
-            queryset = queryset.filter(qualifications=qualifications_filter)
+        if qualifications_db_value:
+            queryset = queryset.filter(qualifications=qualifications_db_value)
         
-        if fe_score_min is not None:
-            queryset = queryset.filter(fe_score__gte=fe_score_min)
+        if fe_score is not None:
+            queryset = queryset.filter(fe_score__gte=fe_score)
         
-        if be_score_min is not None:
-            queryset = queryset.filter(be_score__gte=be_score_min)
+        if be_score is not None:
+            queryset = queryset.filter(be_score__gte=be_score)
         
         # Serialize the results
         candidates_data = []
         for candidate in queryset:
+            # Convert back to display format for response
+            display_seniority = candidate.seniority.title() if candidate.seniority != 'mid' else 'Mid'
+            display_qualifications = candidate.qualifications.replace('_', ' ').title()
+            
             candidates_data.append({
                 "id": str(candidate.id),
                 "name": candidate.name,
                 "skills": candidate.skills,
                 "fe_score": candidate.fe_score,
                 "be_score": candidate.be_score,
-                "seniority": candidate.seniority,
-                "qualifications": candidate.qualifications,
+                "seniority": display_seniority,
+                "qualifications": display_qualifications,
                 "created_at": candidate.created_at.isoformat(),
                 "updated_at": candidate.updated_at.isoformat()
             })
@@ -188,10 +226,10 @@ def get_candidates(request):
             "total_count": len(candidates_data),
             "filters_applied": {
                 "skills": skills_filter,
-                "seniority": seniority_filter,
+                "seniorityLevel": seniority_level,
                 "qualifications": qualifications_filter,
-                "fe_score_min": fe_score_min,
-                "be_score_min": be_score_min
+                "fe_score": fe_score,
+                "be_score": be_score
             }
         }, status=status.HTTP_200_OK)
         
